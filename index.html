@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BITS Connect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'bits-red': '#DA291C',
+              'bits-dark': '#121212',
+              'bits-light-dark': '#1E1E1E',
+              'bits-medium-dark': '#2A2A2A',
+              'bits-text': '#EAEAEA',
+              'bits-text-muted': '#A0A0A0',
+            }
+          }
+        }
+      }
+    </script>
+  <!-- Add Babel for in-browser JSX/TS transpilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-bits-dark text-bits-text">
+    <div id="root"></div>
+    <!-- Changed script type for Babel to transpile, and added data-type="module" to handle imports -->
+    <script type="text/babel" data-type="module" src="/index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "BITS Connect",
+  "description": "A social media platform exclusively for students of BITS Pilani across all campuses. Connect, share, and chat with fellow BITSians.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
