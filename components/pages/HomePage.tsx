@@ -1,8 +1,10 @@
+// src/components/homepage/HomePage.tsx
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post } from './Post';
-import { Post as PostType, MediaType, PostMedia } from '../../types';
+import { Post as PostType, PostMedia, MediaType } from '../../types';
 import { ImageIcon, VideoIcon, XCircleIcon } from '../icons';
+import { uploadFile, addPost, getFileUrl } from '../../supa/supabaseHelpers';
 
 const MediaPreview: React.FC<{ files: File[], onRemove: (fileName: string) => void }> = ({ files, onRemove }) => {
     if (files.length === 0) return null;
@@ -29,8 +31,8 @@ const MediaPreview: React.FC<{ files: File[], onRemove: (fileName: string) => vo
                 );
             })}
         </div>
-    )
-}
+    );
+};
 
 const CreatePost: React.FC = () => {
     const { currentUser, setPosts } = useApp();
@@ -38,12 +40,11 @@ const CreatePost: React.FC = () => {
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
-    
+
     useEffect(() => {
-      // Clean up object URLs on unmount
-      return () => {
-        mediaFiles.forEach(file => URL.revokeObjectURL(URL.createObjectURL(file)));
-      };
+        return () => {
+            mediaFiles.forEach(file => URL.revokeObjectURL(URL.createObjectURL(file)));
+        };
     }, [mediaFiles]);
 
     if (!currentUser) return null;
@@ -52,13 +53,10 @@ const CreatePost: React.FC = () => {
         if (event.target.files) {
             const newFiles = Array.from(event.target.files);
             setMediaFiles(prev => {
-                // FIX: Explicitly type `f` as `File` to fix type inference issue.
-                const existingNames = new Set(prev.map((f: File) => f.name));
-                // FIX: Explicitly type `f` as `File` to fix type inference issue where it was being inferred as `unknown`.
-                const uniqueNewFiles = newFiles.filter((f: File) => !existingNames.has(f.name));
-                return [...prev, ...uniqueNewFiles].slice(0, 8); // Limit to 8 files
+                const existingNames = new Set(prev.map(f => f.name));
+                const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
+                return [...prev, ...uniqueNewFiles].slice(0, 8);
             });
-             // Reset the input value to allow selecting the same file again
             event.target.value = '';
         }
     };
@@ -67,31 +65,47 @@ const CreatePost: React.FC = () => {
         setMediaFiles(prev => prev.filter(f => f.name !== fileName));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!content.trim() && mediaFiles.length === 0) return;
 
-        const media: PostMedia[] = mediaFiles.map(file => ({
-            url: URL.createObjectURL(file), // Using object URL for simplicity
-            type: file.type.startsWith('image/') ? MediaType.IMAGE : MediaType.VIDEO,
-        }));
+        const uploadedMedia: PostMedia[] = [];
+
+        for (const file of mediaFiles) {
+            const { data, error } = await uploadFile(file, 'post-images');
+            if (error) {
+                console.error('Upload error:', error);
+                continue;
+            }
+            const url = getFileUrl(data.path, 'post-images');
+            uploadedMedia.push({
+                url,
+                type: file.type.startsWith('image/') ? MediaType.IMAGE : MediaType.VIDEO,
+            });
+        }
 
         const newPost: PostType = {
             id: `post-${Date.now()}`,
             authorId: currentUser.id,
             content: content.trim(),
-            media,
+            media: uploadedMedia,
             timestamp: new Date().toISOString(),
             likes: [],
             dislikes: [],
             comments: [],
         };
 
-        setPosts(prevPosts => [newPost, ...prevPosts]);
-        setContent('');
-        setMediaFiles([]);
+        // Save to Supabase
+        const { error } = await addPost(currentUser.id, content.trim(), uploadedMedia);
+        if (error) {
+            console.error('Database error:', error);
+        } else {
+            setPosts(prev => [newPost, ...prev]);
+            setContent('');
+            setMediaFiles([]);
+        }
     };
-    
+
     const canPost = content.trim() || mediaFiles.length > 0;
 
     return (
@@ -101,20 +115,20 @@ const CreatePost: React.FC = () => {
                 <form onSubmit={handleSubmit} className="w-full">
                     <textarea 
                         value={content}
-                        onChange={(e) => setContent(e.target.value)}
+                        onChange={e => setContent(e.target.value)}
                         className="w-full bg-bits-medium-dark rounded-lg p-3 text-bits-text placeholder-bits-text-muted focus:outline-none focus:ring-2 focus:ring-bits-red resize-none"
                         rows={3}
                         placeholder={`What's on your mind, ${currentUser.profile.name.split(' ')[0]}?`}
                     />
-                     <MediaPreview files={mediaFiles} onRemove={removeMediaFile} />
+                    <MediaPreview files={mediaFiles} onRemove={removeMediaFile} />
                     <div className="flex justify-between items-center mt-3">
                         <div className="flex space-x-2">
-                             <input type="file" ref={imageInputRef} onChange={handleFileChange} accept="image/*" multiple hidden />
-                             <input type="file" ref={videoInputRef} onChange={handleFileChange} accept="video/*" multiple hidden />
+                            <input type="file" ref={imageInputRef} onChange={handleFileChange} accept="image/*" multiple hidden />
+                            <input type="file" ref={videoInputRef} onChange={handleFileChange} accept="video/*" multiple hidden />
                             <button type="button" onClick={() => imageInputRef.current?.click()} className="text-bits-text-muted hover:text-blue-500 p-2 rounded-full transition-colors">
                                 <ImageIcon />
                             </button>
-                             <button type="button" onClick={() => videoInputRef.current?.click()} className="text-bits-text-muted hover:text-green-500 p-2 rounded-full transition-colors">
+                            <button type="button" onClick={() => videoInputRef.current?.click()} className="text-bits-text-muted hover:text-green-500 p-2 rounded-full transition-colors">
                                 <VideoIcon />
                             </button>
                         </div>
@@ -129,44 +143,40 @@ const CreatePost: React.FC = () => {
 };
 
 export const HomePage: React.FC = () => {
-  const { posts, featuredPostId } = useApp();
-  
-  const sortedPosts = useMemo(() => {
-    let postsToRender = [...posts];
-    let featuredPost: PostType | undefined;
+    const { posts, featuredPostId } = useApp();
 
-    if (featuredPostId) {
-        featuredPost = postsToRender.find(p => p.id === featuredPostId);
-        if (featuredPost) {
-            postsToRender = postsToRender.filter(p => p.id !== featuredPostId);
+    const sortedPosts = useMemo(() => {
+        let postsToRender = [...posts];
+        let featuredPost: PostType | undefined;
+
+        if (featuredPostId) {
+            featuredPost = postsToRender.find(p => p.id === featuredPostId);
+            if (featuredPost) postsToRender = postsToRender.filter(p => p.id !== featuredPostId);
         }
-    }
 
-    const normallySortedPosts = postsToRender.sort((a, b) => {
-        const scoreA = a.likes.length - a.dislikes.length;
-        const scoreB = b.likes.length - b.dislikes.length;
-        if (scoreA !== scoreB) {
-            return scoreB - scoreA;
-        }
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-    });
+        const normallySortedPosts = postsToRender.sort((a, b) => {
+            const scoreA = a.likes.length - a.dislikes.length;
+            const scoreB = b.likes.length - b.dislikes.length;
+            if (scoreA !== scoreB) return scoreB - scoreA;
+            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
 
-    return featuredPost ? [featuredPost, ...normallySortedPosts] : normallySortedPosts;
-  }, [posts, featuredPostId]);
+        return featuredPost ? [featuredPost, ...normallySortedPosts] : normallySortedPosts;
+    }, [posts, featuredPostId]);
 
-  return (
-    <div className="w-full max-w-2xl mx-auto py-6">
-        <CreatePost />
-        {sortedPosts.length > 0 ? (
-            sortedPosts.map((post) => (
-                <Post key={post.id} post={post} isFeatured={post.id === featuredPostId}/>
-            ))
-        ) : (
-             <div className="bg-bits-light-dark rounded-lg p-8 text-center text-bits-text-muted">
-                <h3 className="text-xl font-semibold text-bits-text">Welcome to BITS Connect!</h3>
-                <p className="mt-2">It looks a little quiet in here. Be the first to share something!</p>
-            </div>
-        )}
-    </div>
-  );
+    return (
+        <div className="w-full max-w-2xl mx-auto py-6">
+            <CreatePost />
+            {sortedPosts.length > 0 ? (
+                sortedPosts.map(post => (
+                    <Post key={post.id} post={post} isFeatured={post.id === featuredPostId} />
+                ))
+            ) : (
+                <div className="bg-bits-light-dark rounded-lg p-8 text-center text-bits-text-muted">
+                    <h3 className="text-xl font-semibold text-bits-text">Welcome to BITS Connect!</h3>
+                    <p className="mt-2">It looks a little quiet in here. Be the first to share something!</p>
+                </div>
+            )}
+        </div>
+    );
 };

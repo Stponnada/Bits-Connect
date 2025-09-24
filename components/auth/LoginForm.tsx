@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { loginUser } from '../../supa/supabaseHelpers';
+
 
 export const LoginForm: React.FC = () => {
     const { users, setCurrentUser } = useApp();
@@ -8,16 +10,20 @@ export const LoginForm: React.FC = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const user = users.find(u => u.email === email);
-        if (user) {
-            // In a real app, you'd verify the password hash
-            setCurrentUser(user);
+
+        const { data, error } = await loginUser(email, password);
+
+        if (error) {
+            setError(error.message);
         } else {
-            setError('Invalid email or password.');
+            setError('');
+            console.log('Logged in user:', data.user);
+            // If you want, store data.user in context here
         }
     };
+
 
     return (
         <div>

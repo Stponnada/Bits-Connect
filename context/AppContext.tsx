@@ -1,23 +1,11 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User, Post, ChatMessage, Page } from '../types';
-import { mockUsers, mockPosts, mockMessages } from '../data/mockData';
-
-// Helper function to get initial state from localStorage
-const getInitialState = <T,>(key: string, defaultValue: T): T => {
-  try {
-    const item = window.localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
-  } catch (error) {
-    console.warn(`Error reading localStorage key "${key}":`, error);
-    return defaultValue;
-  }
-};
+import { User, Post, ChatMessage, Page, PostMedia, MediaType } from '../types';
+import { supabase } from '../supabaseClient'; // your client
+import { getPostsFromDB } from '../supa/supabaseHelpers';
 
 interface AppContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
-  users: User[];
-  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
   messages: ChatMessage[];
@@ -36,68 +24,41 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => getInitialState<User | null>('bitsconnect_currentUser', null));
-  const [users, setUsers] = useState<User[]>(() => getInitialState<User[]>('bitsconnect_users', mockUsers));
-  const [posts, setPosts] = useState<Post[]>(() => getInitialState<Post[]>('bitsconnect_posts', mockPosts));
-  const [messages, setMessages] = useState<ChatMessage[]>(() => getInitialState<ChatMessage[]>('bitsconnect_messages', mockMessages));
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentPage, _setCurrentPage] = useState<Page>('home');
   const [activeChatUserId, setActiveChatUserId] = useState<string | null>(null);
   const [viewedProfileId, setViewedProfileId] = useState<string | null>(null);
   const [featuredPostId, setFeaturedPostId] = useState<string | null>(null);
 
-  // useEffect hooks to persist state to localStorage
+  // Fetch posts from Supabase on mount
   useEffect(() => {
-    try {
-      window.localStorage.setItem('bitsconnect_currentUser', JSON.stringify(currentUser));
-    } catch (error) {
-      console.error('Error saving currentUser to localStorage', error);
-    }
-  }, [currentUser]);
+    const fetchPosts = async () => {
+      const postsFromDB = await getPostsFromDB();
+      setPosts(postsFromDB);
+    };
+    fetchPosts();
+  }, []);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('bitsconnect_users', JSON.stringify(users));
-    } catch (error) {
-      console.error('Error saving users to localStorage', error);
-    }
-  }, [users]);
-
-  useEffect(() => {
-    try {
-      // Note: Object URLs for media will not persist across sessions.
-      window.localStorage.setItem('bitsconnect_posts', JSON.stringify(posts));
-    } catch (error) {
-      console.error('Error saving posts to localStorage', error);
-    }
-  }, [posts]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('bitsconnect_messages', JSON.stringify(messages));
-    } catch (error) {
-      console.error('Error saving messages to localStorage', error);
-    }
-  }, [messages]);
-
-
-  const findUserById = (id: string) => users.find(u => u.id === id);
+  const findUserById = (id: string) => {
+    // Optional: fetch user from Supabase if needed
+    return null; // placeholder; can implement getUserById in supabaseHelpers
+  };
 
   const setCurrentPage = (page: Page, options: { isNavFromLogo?: boolean } = {}) => {
     if (page === 'profile') {
       setViewedProfileId(null);
     }
-    // If navigating away from home OR clicking the logo to go home, clear the featured post.
     if (page !== 'home' || options.isNavFromLogo) {
       setFeaturedPostId(null);
     }
     _setCurrentPage(page);
   };
 
-  const value = {
+  const value: AppContextType = {
     currentUser,
     setCurrentUser,
-    users,
-    setUsers,
     posts,
     setPosts,
     messages,
