@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User, Post, ChatMessage, Page, PostMedia, MediaType } from '../types';
 import { supabase } from '../supabaseClient'; // your client
-import { getPostsFromDB } from '../supa/supabaseHelpers';
+import { fetchPosts } from '../supa/supabaseHelpers';
 
 interface AppContextType {
   currentUser: User | null;
@@ -35,7 +35,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Fetch posts from Supabase on mount
   useEffect(() => {
     const fetchPosts = async () => {
-      const postsFromDB = await getPostsFromDB();
+      const postsFromDB = await fetchPosts();
       setPosts(postsFromDB);
     };
     fetchPosts();
